@@ -3,7 +3,7 @@ class RobustHypoxiaClassifier {
         this.model = null;
         this.isModelLoaded = false;
         this.analysisHistory = [];
-        this.modelPath = './public/web_model/model.json';
+        this.modelPath = './trained_model/model.json';
         this.preprocessingParams = null;
         this.scaler = null;
         this.inputShape = [8]; // Expected input shape
@@ -97,7 +97,7 @@ class RobustHypoxiaClassifier {
     async loadFromMemoryWithFix() {
         // Get model artifacts
         const modelUrl = new URL(this.modelPath, window.location.href);
-        const weightsUrl = modelUrl.href.replace('model.json', 'model_weights.bin');
+        const weightsUrl = modelUrl.href.replace('model.json', 'group1-shard1of1.bin');
         
         // Fetch model topology
         const modelResponse = await fetch(modelUrl);
