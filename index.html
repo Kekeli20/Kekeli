@@ -4,11 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HypoxGuard - Professional Hypoxia Monitor</title>
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="ai-styles.css">
+
+    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
@@ -19,6 +25,7 @@
         <span class="blob b2"></span>
         <span class="grid-overlay"></span>
     </div>
+
     <div class="app-container">
         <header class="header">
             <div class="header-content">
@@ -35,14 +42,8 @@
 
         <main class="main-content">
             <section class="control-panel">
-                <button id="connectBtn" class="connect-btn">
-                    <span class="btn-icon"></span>
-                    Connect your device
-                </button>
-                <button id="disconnectBtn" class="disconnect-btn" disabled>
-                    <span class="btn-icon"></span>
-                    Disconnect your device
-                </button>
+                <button id="connectBtn" class="connect-btn">Connect your device</button>
+                <button id="disconnectBtn" class="disconnect-btn" disabled>Disconnect your device</button>
             </section>
 
             <section class="vital-signs">
@@ -103,20 +104,12 @@
                     </div>
                 </div>
                 <div class="data-controls">
-                    <button id="downloadBtn" class="download-btn">
-                        <span class="btn-icon">📥</span>
-                        Download Data (CSV)
-                    </button>
-                    <button id="clearStorageBtn" class="clear-btn">
-                        <span class="btn-icon">🗑️</span>
-                        Clear All Data
-                    </button>
+                    <button id="downloadBtn" class="download-btn">📥 Download Data (CSV)</button>
+                    <button id="clearStorageBtn" class="clear-btn">🗑️ Clear All Data</button>
                 </div>
                 <div class="recent-data">
                     <h4>Recent Measurements</h4>
-                    <div id="recentDataList" class="data-list">
-                        <p class="no-data">No data available</p>
-                    </div>
+                    <div id="recentDataList" class="data-list"><p class="no-data">No data available</p></div>
                 </div>
             </section>
         </main>
@@ -140,11 +133,21 @@
         </div>
     </div>
 
-    <!-- Script imports -->
+    <!-- JS Modules -->
     <script src="bluetooth.js"></script>
     <script src="chart.js"></script>
     <script src="app.js"></script>
-    <script type="module" src="hypoxia_classifier.js"></script>
+    <script type="module">
+        import { HypoxiaClassifier } from './public/web_model/hypoxia_classifier.js';
+
+        const classifier = new HypoxiaClassifier();
+        classifier.loadModel().then(() => {
+            console.log("AI model loaded ✅");
+            window.hypoxiaClassifier = classifier; // make accessible globally
+        }).catch(err => {
+            console.error("AI model load failed:", err);
+        });
+    </script>
     <script src="ai-interface.js"></script>
     <script src="ai-integration.js"></script>
 </body>

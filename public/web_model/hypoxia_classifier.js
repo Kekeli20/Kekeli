@@ -1,7 +1,7 @@
 // hypoxia_classifier.js
 import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js';
 
-class FixedHypoxiaClassifier {
+export class HypoxiaClassifier {
     constructor() {
         this.model = null;
         this.isModelLoaded = false;
@@ -167,14 +167,11 @@ class FixedHypoxiaClassifier {
 
         const [normal, mildHypoxia, severeHypoxia] = probabilities;
         const maxIndex = probabilities.indexOf(Math.max(...probabilities));
-
         const classes = ['Normal', 'Mild Hypoxia', 'Severe Hypoxia'];
-        const predictedClass = classes[maxIndex];
-        const confidence = probabilities[maxIndex];
 
-        const result = {
-            predictedClass,
-            confidence,
+        return {
+            predictedClass: classes[maxIndex],
+            confidence: probabilities[maxIndex],
             normal,
             mildHypoxia,
             severeHypoxia,
@@ -182,75 +179,5 @@ class FixedHypoxiaClassifier {
             rawFeatures,
             scaledFeatures
         };
-
-        this.analysisHistory.push(result);
-        if (this.analysisHistory.length > 100) {
-            this.analysisHistory = this.analysisHistory.slice(-100);
-        }
-
-        return result;
-    }
-
-    generateInsights(spo2, heartRate, prediction) {
-        const insights = [];
-        if (spo2 < 90) {
-            insights.push({ type: 'critical', message: 'Severe oxygen desaturation detected', recommendation: 'Immediate medical attention required' });
-        } else if (spo2 < 95) {
-            insights.push({ type: 'warning', message: 'Mild oxygen desaturation', recommendation: 'Monitor closely and consider oxygen therapy' });
-        } else {
-            insights.push({ type: 'positive', message: 'Normal oxygen saturation', recommendation: 'Continue current care' });
-        }
-
-        if (heartRate < 60) {
-            insights.push({ type: 'warning', message: 'Bradycardia detected', recommendation: 'Monitor heart rate closely' });
-        } else if (heartRate > 100) {
-            insights.push({ type: 'warning', message: 'Tachycardia detected', recommendation: 'Consider causes and treatment' });
-        }
-
-        if (prediction.confidence < 0.7) {
-            insights.push({ type: 'info', message: 'AI prediction confidence is low', recommendation: 'Consider manual assessment' });
-        }
-
-        return insights;
-    }
-
-    getRiskAssessment(spo2, heartRate, prediction) {
-        let score = 0;
-        const maxScore = 7;
-        if (spo2 < 90) score += 3;
-        else if (spo2 < 95) score += 1;
-
-        if (heartRate < 50 || heartRate > 120) score += 2;
-        else if (heartRate < 60 || heartRate > 100) score += 1;
-
-        if (prediction.predictedClass === 'Severe Hypoxia') score += 2;
-        else if (prediction.predictedClass === 'Mild Hypoxia') score += 1;
-
-        let level = 'Low';
-        if (score >= 5) level = 'Critical';
-        else if (score >= 3) level = 'High';
-        else if (score >= 1) level = 'Medium';
-
-        return { score, maxScore, level };
-    }
-
-    getAnalysisHistory() {
-        return this.analysisHistory;
-    }
-
-    clearAnalysisHistory() {
-        this.analysisHistory = [];
-    }
-
-    exportPredictionData() {
-        return JSON.stringify({
-            modelInfo: { loaded: this.isModelLoaded, inputShape: this.model?.inputShape, outputShape: this.model?.outputShape },
-            preprocessingParams: this.preprocessingParams,
-            scalerInfo: this.scaler,
-            analysisHistory: this.analysisHistory,
-            exportTime: new Date().toISOString()
-        }, null, 2);
     }
 }
-
-export { FixedHypoxiaClassifier as HypoxiaClassifier };
