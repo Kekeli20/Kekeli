@@ -3,7 +3,7 @@ class HypoxiaClassifier {
         this.model = null;
         this.isModelLoaded = false;
         this.analysisHistory = [];
-        this.modelPath = './trained_model/web_model/model.json';
+        this.modelPath = './trained_model/model.json';
     }
 
     async loadModel() {
