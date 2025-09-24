@@ -1,4 +1,4 @@
-class RobustHypoxiaClassifier {
+class FixedHypoxiaClassifier {
     constructor() {
         this.model = null;
         this.isModelLoaded = false;
@@ -6,18 +6,22 @@ class RobustHypoxiaClassifier {
         this.modelPath = './trained_model/model.json';
         this.preprocessingParams = null;
         this.scaler = null;
-        this.inputShape = [8]; // Expected input shape
+        this.inputShape = [8];
     }
 
     async loadModel() {
         try {
             console.log('Loading hypoxia classification model...');
             
-            // Try multiple loading strategies
-            await this.tryLoadingStrategies();
+            // Load preprocessing parameters first
+            await this.loadPreprocessingParams();
+            
+            // Try the model format fix approach
+            await this.loadModelWithFormatFix();
             
             console.log('Model loaded successfully');
-            console.log('Model summary:', this.getModelSummary());
+            console.log('Input shape:', this.model.inputShape);
+            console.log('Output shape:', this.model.outputShape);
             
             this.isModelLoaded = true;
             
@@ -27,7 +31,7 @@ class RobustHypoxiaClassifier {
             }));
             
         } catch (error) {
-            console.error('All loading strategies failed:', error);
+            console.error('Failed to load model:', error);
             this.isModelLoaded = false;
             
             // Dispatch error event
@@ -37,207 +41,87 @@ class RobustHypoxiaClassifier {
         }
     }
 
-    async tryLoadingStrategies() {
-        const strategies = [
-            () => this.loadDirectly(),
-            () => this.loadWithManualInputShape(),
-            () => this.loadFromMemoryWithFix(),
-            () => this.createFallbackModel()
-        ];
-
-        for (let i = 0; i < strategies.length; i++) {
-            try {
-                console.log(`Trying loading strategy ${i + 1}...`);
-                await strategies[i]();
-                console.log(`Strategy ${i + 1} successful`);
-                return;
-            } catch (error) {
-                console.log(`Strategy ${i + 1} failed:`, error.message);
-                if (i === strategies.length - 1) {
-                    throw error;
-                }
-            }
-        }
-    }
-
-    async loadDirectly() {
-        this.model = await tf.loadLayersModel(this.modelPath);
-    }
-
-    async loadWithManualInputShape() {
-        // Load model JSON manually and fix input shape
+    async loadModelWithFormatFix() {
+        // Load the model JSON and fix the format
         const response = await fetch(this.modelPath);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const modelData = await response.json();
-        console.log('Original model data loaded');
-
-        // Fix input layer configuration
-        if (modelData.modelTopology?.config?.layers) {
-            const layers = modelData.modelTopology.config.layers;
-            
-            // Find and fix input layer
-            for (let layer of layers) {
-                if (layer.className === 'InputLayer' && layer.config) {
-                    // Set explicit input shape
-                    layer.config.batchInputShape = [null, ...this.inputShape];
-                    delete layer.config.inputShape; // Remove conflicting property
-                    console.log('Fixed input layer:', layer.config);
-                    break;
-                }
-            }
+        const originalModel = await response.json();
+        console.log('Original model loaded, fixing format...');
+        
+        // Create a fixed version
+        const fixedModel = this.createFixedModelFormat(originalModel);
+        
+        // Load weights separately
+        const weightsPath = this.modelPath.replace('model.json', 'group1-shard1of1.bin');
+        const weightsResponse = await fetch(weightsPath);
+        if (!weightsResponse.ok) {
+            throw new Error(`Could not load weights: ${weightsResponse.status}`);
         }
-
-        // Load model from modified configuration
-        this.model = await tf.loadLayersModel(tf.io.fromMemory(modelData));
-    }
-
-    async loadFromMemoryWithFix() {
-        // Get model artifacts
-        const modelUrl = new URL(this.modelPath, window.location.href);
-        const weightsUrl = modelUrl.href.replace('model.json', 'group1-shard1of1.bin');
         
-        // Fetch model topology
-        const modelResponse = await fetch(modelUrl);
-        const modelTopology = await modelResponse.json();
-        
-        // Fetch weights
-        const weightsResponse = await fetch(weightsUrl);
         const weightsBuffer = await weightsResponse.arrayBuffer();
         
-        // Create corrected model artifacts
-        const correctedTopology = this.fixModelTopology(modelTopology);
-        
-        // Create memory IO handler
-        const memoryHandler = tf.io.fromMemory({
-            modelTopology: correctedTopology.modelTopology,
-            weightSpecs: correctedTopology.weightSpecs,
+        // Create memory IO with fixed format
+        const memoryIO = tf.io.fromMemory({
+            modelTopology: fixedModel.modelTopology,
+            weightSpecs: fixedModel.weightsManifest[0].weights,
             weightData: weightsBuffer,
-            format: correctedTopology.format,
-            generatedBy: correctedTopology.generatedBy,
-            convertedBy: correctedTopology.convertedBy
+            format: fixedModel.format,
+            generatedBy: fixedModel.generatedBy,
+            convertedBy: fixedModel.convertedBy
         });
         
-        this.model = await tf.loadLayersModel(memoryHandler);
+        // Load the model
+        this.model = await tf.loadLayersModel(memoryIO);
+        console.log('Model loaded with format fix');
     }
 
-    fixModelTopology(modelData) {
-        const fixed = JSON.parse(JSON.stringify(modelData)); // Deep copy
+    createFixedModelFormat(originalModel) {
+        // Deep copy the original model
+        const fixed = JSON.parse(JSON.stringify(originalModel));
         
-        if (fixed.modelTopology?.config?.layers) {
-            const layers = fixed.modelTopology.config.layers;
+        // Fix the model topology to be compatible with older TensorFlow.js versions
+        if (fixed.modelTopology && fixed.modelTopology.model_config) {
+            const config = fixed.modelTopology.model_config.config;
             
-            // Fix input layer
-            for (let i = 0; i < layers.length; i++) {
-                if (layers[i].className === 'InputLayer') {
-                    layers[i].config.batchInputShape = [null, ...this.inputShape];
+            if (config && config.layers) {
+                // Fix the input layer specifically
+                for (let i = 0; i < config.layers.length; i++) {
+                    const layer = config.layers[i];
                     
-                    // Remove potentially conflicting properties
-                    delete layers[i].config.inputShape;
-                    delete layers[i].config.shape;
+                    if (layer.class_name === 'InputLayer') {
+                        // Convert batch_shape to the format TensorFlow.js expects
+                        if (layer.config.batch_shape) {
+                            layer.config.batch_input_shape = layer.config.batch_shape;
+                            // Keep both for compatibility
+                        }
+                        
+                        // Ensure dtype is simple string
+                        layer.config.dtype = 'float32';
+                        
+                        // Remove complex dtype objects
+                        delete layer.config.dtype;
+                        layer.config.dtype = 'float32';
+                        
+                        console.log('Fixed input layer:', layer.config);
+                    }
                     
-                    console.log(`Fixed input layer at index ${i}:`, layers[i].config);
-                    break;
-                }
-            }
-            
-            // Also check for Dense layers that might be acting as input layers
-            for (let i = 0; i < layers.length; i++) {
-                if (layers[i].className === 'Dense' && i === 0) {
-                    // First Dense layer might need input shape
-                    if (!layers[i].config.batchInputShape) {
-                        layers[i].config.batchInputShape = [null, ...this.inputShape];
-                        console.log(`Added input shape to first Dense layer:`, layers[i].config);
+                    // Fix all other layers that have complex dtype objects
+                    if (layer.config && layer.config.dtype && typeof layer.config.dtype === 'object') {
+                        layer.config.dtype = 'float32';
+                    }
+                    
+                    // Remove trainable dtype objects from all layers
+                    if (layer.config && layer.config.dtype && layer.config.dtype.module) {
+                        layer.config.dtype = 'float32';
                     }
                 }
             }
         }
         
         return fixed;
-    }
-
-    async createFallbackModel() {
-        console.log('Creating fallback model with correct architecture...');
-        
-        // Load preprocessing parameters first to understand the expected architecture
-        await this.loadPreprocessingParams();
-        
-        // Create a model that matches the expected architecture from your Python training
-        this.model = tf.sequential({
-            layers: [
-                // Input layer with explicit shape
-                tf.layers.dense({
-                    inputShape: this.inputShape,
-                    units: 256,
-                    activation: 'relu',
-                    kernelRegularizer: tf.regularizers.l2({ l2: 0.0005 }),
-                    name: 'dense_1'
-                }),
-                tf.layers.batchNormalization({ name: 'batch_normalization_1' }),
-                tf.layers.dropout({ rate: 0.4, name: 'dropout_1' }),
-                
-                tf.layers.dense({
-                    units: 128,
-                    activation: 'relu',
-                    kernelRegularizer: tf.regularizers.l2({ l2: 0.0005 }),
-                    name: 'dense_2'
-                }),
-                tf.layers.batchNormalization({ name: 'batch_normalization_2' }),
-                tf.layers.dropout({ rate: 0.3, name: 'dropout_2' }),
-                
-                tf.layers.dense({
-                    units: 64,
-                    activation: 'relu',
-                    kernelRegularizer: tf.regularizers.l2({ l2: 0.0005 }),
-                    name: 'dense_3'
-                }),
-                tf.layers.batchNormalization({ name: 'batch_normalization_3' }),
-                tf.layers.dropout({ rate: 0.2, name: 'dropout_3' }),
-                
-                tf.layers.dense({
-                    units: 32,
-                    activation: 'relu',
-                    kernelRegularizer: tf.regularizers.l2({ l2: 0.0005 }),
-                    name: 'dense_4'
-                }),
-                tf.layers.batchNormalization({ name: 'batch_normalization_4' }),
-                tf.layers.dropout({ rate: 0.1, name: 'dropout_4' }),
-                
-                // Output layer
-                tf.layers.dense({
-                    units: 3,
-                    activation: 'softmax',
-                    name: 'output'
-                })
-            ]
-        });
-        
-        // Compile the model
-        this.model.compile({
-            optimizer: tf.train.adam(0.0001),
-            loss: 'categoricalCrossentropy',
-            metrics: ['accuracy']
-        });
-        
-        console.log('Fallback model created successfully');
-        
-        // Try to load weights if available
-        try {
-            const weightsUrl = this.modelPath.replace('model.json', 'group1-shard1of1.bin');
-            const weightsResponse = await fetch(weightsUrl);
-            
-            if (weightsResponse.ok) {
-                // This is complex and might not work without exact weight mapping
-                console.log('Weights file found but cannot load into fallback model due to architecture differences');
-            }
-        } catch (error) {
-            console.log('Could not load weights for fallback model, using random initialization');
-        }
-        
-        // Initialize with reasonable random weights for demonstration
-        console.warn('Using fallback model with random weights - predictions will be unreliable');
     }
 
     async loadPreprocessingParams() {
@@ -262,25 +146,10 @@ class RobustHypoxiaClassifier {
     }
 
     initializeDefaultScaler() {
-        // Default scaler parameters (these should be replaced with actual training values)
+        // Default scaler parameters
         this.scaler = {
-            center: [90, 75, 1.2, 6.75, 8100, 5625, 2, 1], // Approximate means for features
-            scale: [10, 20, 0.5, 2, 500, 1000, 1, 1]        // Approximate scales for features
-        };
-    }
-
-    getModelSummary() {
-        if (!this.model) return null;
-        
-        return {
-            inputShape: this.model.inputShape,
-            outputShape: this.model.outputShape,
-            layers: this.model.layers.map(layer => ({
-                name: layer.name,
-                className: layer.constructor.name,
-                outputShape: layer.outputShape
-            })),
-            trainableParams: this.model.countParams()
+            center: [90, 75, 1.2, 6.75, 8100, 5625, 2, 1],
+            scale: [10, 20, 0.5, 2, 500, 1000, 1, 1]
         };
     }
 
@@ -337,9 +206,14 @@ class RobustHypoxiaClassifier {
             const rawFeatures = this.engineerFeatures(spo2, heartRate);
             const scaledFeatures = this.scaleFeatures(rawFeatures);
             
+            console.log('Raw features:', rawFeatures);
+            console.log('Scaled features:', scaledFeatures);
+            
             // Create input tensor
             const inputTensor = tf.tensor2d([scaledFeatures], [1, 8]);
             
+            console.log('Input tensor shape:', inputTensor.shape);
+
             // Make prediction
             const prediction = this.model.predict(inputTensor);
             const probabilities = await prediction.data();
@@ -380,7 +254,6 @@ class RobustHypoxiaClassifier {
         }
     }
 
-    // Include all other methods from the previous implementation
     generateInsights(spo2, heartRate, prediction) {
         const insights = [];
 
@@ -460,7 +333,11 @@ class RobustHypoxiaClassifier {
 
     exportPredictionData() {
         return JSON.stringify({
-            modelInfo: this.getModelSummary(),
+            modelInfo: {
+                loaded: this.isModelLoaded,
+                inputShape: this.model?.inputShape,
+                outputShape: this.model?.outputShape
+            },
             preprocessingParams: this.preprocessingParams,
             scalerInfo: this.scaler,
             analysisHistory: this.analysisHistory,
@@ -469,10 +346,5 @@ class RobustHypoxiaClassifier {
     }
 }
 
-// Replace HypoxiaClassifier with RobustHypoxiaClassifier in your main application
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { RobustHypoxiaClassifier };
-}
-
-// For direct usage, alias to the original name
-const HypoxiaClassifier = RobustHypoxiaClassifier;
+// Alias for compatibility
+const HypoxiaClassifier = FixedHypoxiaClassifier;
