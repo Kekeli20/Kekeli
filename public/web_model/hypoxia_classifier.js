@@ -225,7 +225,7 @@ class RobustHypoxiaClassifier {
         
         // Try to load weights if available
         try {
-            const weightsUrl = this.modelPath.replace('model.json', 'model_weights.bin');
+            const weightsUrl = this.modelPath.replace('model.json', 'group1-shard1of1.bin');
             const weightsResponse = await fetch(weightsUrl);
             
             if (weightsResponse.ok) {
