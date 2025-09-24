@@ -1,5 +1,5 @@
 // hypoxia_classifier.js
-import * as tf from '@tensorflow/tfjs';
+import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js';
 
 class FixedHypoxiaClassifier {
     constructor() {
@@ -158,12 +158,7 @@ class FixedHypoxiaClassifier {
         const rawFeatures = this.engineerFeatures(spo2, heartRate);
         const scaledFeatures = this.scaleFeatures(rawFeatures);
 
-        console.log('Raw features:', rawFeatures);
-        console.log('Scaled features:', scaledFeatures);
-
         const inputTensor = tf.tensor2d([scaledFeatures], [1, 8]);
-        console.log('Input tensor shape:', inputTensor.shape);
-
         const prediction = this.model.predict(inputTensor);
         const probabilities = await prediction.data();
 
