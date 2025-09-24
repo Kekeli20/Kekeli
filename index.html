@@ -4,20 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HypoxGuard - Professional Hypoxia Monitor</title>
-
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-    <!-- Styles -->
     <link rel="stylesheet" href="styles.css">
+    <!-- Add AI styles -->
     <link rel="stylesheet" href="ai-styles.css">
-
-    <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <!-- Add TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+
+
 </head>
 <body>
     <div class="background-accents">
@@ -25,7 +23,6 @@
         <span class="blob b2"></span>
         <span class="grid-overlay"></span>
     </div>
-
     <div class="app-container">
         <header class="header">
             <div class="header-content">
@@ -41,13 +38,17 @@
         </header>
 
         <main class="main-content">
-            <!-- Control Panel -->
             <section class="control-panel">
-                <button id="connectBtn" class="connect-btn">Connect your device</button>
-                <button id="disconnectBtn" class="disconnect-btn" disabled>Disconnect your device</button>
+                <button id="connectBtn" class="connect-btn">
+                    <span class="btn-icon"></span>
+                    Connect your device
+                </button>
+                <button id="disconnectBtn" class="disconnect-btn" disabled>
+                    <span class="btn-icon"></span>
+                    Disconnect your device
+                </button>
             </section>
 
-            <!-- Vital Signs -->
             <section class="vital-signs">
                 <div class="vital-card spo2-card">
                     <div class="vital-header">
@@ -70,7 +71,6 @@
                 </div>
             </section>
 
-            <!-- Chart Section -->
             <section class="chart-section">
                 <div class="chart-header">
                     <h3>Real-time SpO₂ Monitoring</h3>
@@ -98,7 +98,6 @@
                 </div>
             </section>
 
-            <!-- Data Section -->
             <section class="data-section">
                 <div class="data-header">
                     <h3>Data Management</h3>
@@ -108,8 +107,14 @@
                     </div>
                 </div>
                 <div class="data-controls">
-                    <button id="downloadBtn" class="download-btn">📥 Download Data (CSV)</button>
-                    <button id="clearStorageBtn" class="clear-btn">🗑️ Clear All Data</button>
+                    <button id="downloadBtn" class="download-btn">
+                        <span class="btn-icon">📥</span>
+                        Download Data (CSV)
+                    </button>
+                    <button id="clearStorageBtn" class="clear-btn">
+                        <span class="btn-icon">🗑️</span>
+                        Clear All Data
+                    </button>
                 </div>
                 <div class="recent-data">
                     <h4>Recent Measurements</h4>
@@ -120,7 +125,6 @@
             </section>
         </main>
 
-        <!-- Alerts -->
         <div id="alertModal" class="alert-modal">
             <div class="alert-content">
                 <div class="alert-icon">⚠️</div>
@@ -140,13 +144,11 @@
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="bluetooth.js"></script>
     <script src="chart.js"></script>
     <script src="app.js"></script>
-
-    <!-- AI Classifier -->
-    <script type="module" src="public/web_model/hypoxia_classifier.js"></script>
-    <script type="module" src="ai-integration.js"></script>
+    <script src="public/web_model/hypoxia_classifier.js"></script>
+    <script src="ai-interface.js"></script>
+    <script src="ai-integration.js"></script>
 </body>
 </html>

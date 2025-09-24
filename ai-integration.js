@@ -220,3 +220,7 @@ const AIUtils = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { HypoxiaMonitorAppWithAI, AIConfig, AIUtils };
 }
+// At the end of the file
+window.HypoxiaMonitorAppWithAI = HypoxiaMonitorAppWithAI;
+window.AIConfig = AIConfig;
+window.AIUtils = AIUtils;

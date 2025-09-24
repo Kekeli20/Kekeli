@@ -409,3 +409,5 @@ class AIInterface {
         this.elements.insightsList.innerHTML = '<p class="no-insights">No insights available yet.</p>';
     }
 }
+// At the end of the file
+window.AIInterface = AIInterface;

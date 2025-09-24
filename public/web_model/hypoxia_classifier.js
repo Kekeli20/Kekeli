@@ -1,9 +1,12 @@
-class HypoxiaClassifier {
+class FixedHypoxiaClassifier {
     constructor() {
         this.model = null;
         this.isModelLoaded = false;
         this.analysisHistory = [];
         this.modelPath = './trained_model/model.json';
+        this.preprocessingParams = null;
+        this.scaler = null;
+        this.inputShape = [8];
     }
 
     async loadModel() {
@@ -193,3 +196,7 @@ class HypoxiaClassifier {
         }, null, 2);
     }
 }
+
+// Make available globally for browser use
+window.HypoxiaClassifier = FixedHypoxiaClassifier;
+window.FixedHypoxiaClassifier = FixedHypoxiaClassifier;

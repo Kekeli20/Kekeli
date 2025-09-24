@@ -374,6 +374,6 @@ class HypoxiaMonitorApp {
 
 // Initialize the application when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    window.hypoxiaApp = new HypoxiaMonitorAppWithAI();
+    window.app = new HypoxiaMonitorAppWithAI(); // Make sure this matches
 });
 
