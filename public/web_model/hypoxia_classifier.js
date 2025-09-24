@@ -1,3 +1,6 @@
+// hypoxia_classifier.js
+import * as tf from '@tensorflow/tfjs';
+
 class FixedHypoxiaClassifier {
     constructor() {
         this.model = null;
@@ -8,32 +11,32 @@ class FixedHypoxiaClassifier {
         this.scaler = null;
         this.inputShape = [8];
 
-        // Register L2 regularizer before loading the model
         this.registerL2Regularizer();
     }
 
     registerL2Regularizer() {
-        tf.serialization.registerClass(class L2 extends tf.regularizers.Regularizer {
+        class L2Regularizer {
             constructor(args) {
-                super();
                 this.l2 = args?.l2 ?? 0.01;
             }
+
             apply(x) {
                 return tf.mul(this.l2, tf.sum(tf.square(x)));
             }
+
             getConfig() {
                 return { l2: this.l2 };
             }
-        });
-        console.log("L2 regularizer registered with TensorFlow.js");
+        }
+
+        tf.serialization.registerClass(L2Regularizer);
+        console.log("L2 regularizer registered");
     }
 
     async loadModel() {
         try {
             console.log('Loading hypoxia classification model...');
-
             await this.loadPreprocessingParams();
-
             await this.loadModelWithFormatFix();
 
             console.log('Model loaded successfully');
@@ -41,18 +44,11 @@ class FixedHypoxiaClassifier {
             console.log('Output shape:', this.model.outputShape);
 
             this.isModelLoaded = true;
-
-            window.dispatchEvent(new CustomEvent('aiModelReady', {
-                detail: { isReady: true }
-            }));
-
+            window.dispatchEvent(new CustomEvent('aiModelReady', { detail: { isReady: true } }));
         } catch (error) {
             console.error('Failed to load model:', error);
             this.isModelLoaded = false;
-
-            window.dispatchEvent(new CustomEvent('aiError', {
-                detail: { message: 'Failed to load AI model: ' + error.message }
-            }));
+            window.dispatchEvent(new CustomEvent('aiError', { detail: { message: 'Failed to load AI model: ' + error.message } }));
         }
     }
 
@@ -62,7 +58,6 @@ class FixedHypoxiaClassifier {
 
         const originalModel = await response.json();
         console.log('Original model loaded, fixing format...');
-
         const fixedModel = this.createFixedModelFormat(originalModel);
 
         const weightsPath = this.modelPath.replace('model.json', 'group1-shard1of1.bin');
@@ -70,7 +65,6 @@ class FixedHypoxiaClassifier {
         if (!weightsResponse.ok) throw new Error(`Could not load weights: ${weightsResponse.status}`);
 
         const weightsBuffer = await weightsResponse.arrayBuffer();
-
         const memoryIO = tf.io.fromMemory({
             modelTopology: fixedModel.modelTopology,
             weightSpecs: fixedModel.weightsManifest[0].weights,
@@ -86,27 +80,20 @@ class FixedHypoxiaClassifier {
 
     createFixedModelFormat(originalModel) {
         const fixed = JSON.parse(JSON.stringify(originalModel));
-
         if (fixed.modelTopology && fixed.modelTopology.model_config) {
             const config = fixed.modelTopology.model_config.config;
             if (config && config.layers) {
-                for (let i = 0; i < config.layers.length; i++) {
-                    const layer = config.layers[i];
-
-                    if (layer.class_name === 'InputLayer') {
-                        if (layer.config.batch_shape) {
-                            layer.config.batch_input_shape = layer.config.batch_shape;
-                        }
+                for (let layer of config.layers) {
+                    if (layer.class_name === 'InputLayer' && layer.config.batch_shape) {
+                        layer.config.batch_input_shape = layer.config.batch_shape;
                         layer.config.dtype = 'float32';
                     }
-
-                    if (layer.config && layer.config.dtype && typeof layer.config.dtype === 'object') {
+                    if (layer.config?.dtype && typeof layer.config.dtype === 'object') {
                         layer.config.dtype = 'float32';
                     }
                 }
             }
         }
-
         return fixed;
     }
 
@@ -153,118 +140,80 @@ class FixedHypoxiaClassifier {
         for (let i = 0; i < bins.length - 1; i++) {
             if (value >= bins[i] && value < bins[i + 1]) return i;
         }
-        if (value >= bins[bins.length - 1]) return bins.length - 2;
-        return 0;
+        return value >= bins[bins.length - 1] ? bins.length - 2 : 0;
     }
 
     scaleFeatures(features) {
-        if (!this.scaler) {
-            console.warn('No scaler available, returning unscaled features');
-            return features;
-        }
-        return features.map((feature, i) => {
-            return (feature - this.scaler.center[i]) / this.scaler.scale[i];
-        });
+        if (!this.scaler) return features;
+        return features.map((feature, i) => (feature - this.scaler.center[i]) / this.scaler.scale[i]);
     }
 
     async predictHypoxiaStatus(spo2, heartRate) {
         if (!this.isModelLoaded) throw new Error('Model not loaded');
 
-        try {
-            if (spo2 < 0 || spo2 > 100 || heartRate < 0 || heartRate > 300) {
-                throw new Error(`Invalid vital signs: SpO2=${spo2}, HR=${heartRate}`);
-            }
-
-            const rawFeatures = this.engineerFeatures(spo2, heartRate);
-            const scaledFeatures = this.scaleFeatures(rawFeatures);
-
-            console.log('Raw features:', rawFeatures);
-            console.log('Scaled features:', scaledFeatures);
-
-            const inputTensor = tf.tensor2d([scaledFeatures], [1, 8]);
-
-            console.log('Input tensor shape:', inputTensor.shape);
-
-            const prediction = this.model.predict(inputTensor);
-            const probabilities = await prediction.data();
-
-            inputTensor.dispose();
-            prediction.dispose();
-
-            const [normal, mildHypoxia, severeHypoxia] = probabilities;
-            const maxIndex = probabilities.indexOf(Math.max(...probabilities));
-
-            const classes = ['Normal', 'Mild Hypoxia', 'Severe Hypoxia'];
-            const predictedClass = classes[maxIndex];
-            const confidence = probabilities[maxIndex];
-
-            const result = {
-                predictedClass,
-                confidence,
-                normal,
-                mildHypoxia,
-                severeHypoxia,
-                timestamp: Date.now(),
-                rawFeatures,
-                scaledFeatures
-            };
-
-            this.analysisHistory.push(result);
-
-            if (this.analysisHistory.length > 100) {
-                this.analysisHistory = this.analysisHistory.slice(-100);
-            }
-
-            return result;
-        } catch (error) {
-            console.error('Prediction failed:', error);
-            throw error;
+        if (spo2 < 0 || spo2 > 100 || heartRate < 0 || heartRate > 300) {
+            throw new Error(`Invalid vital signs: SpO2=${spo2}, HR=${heartRate}`);
         }
+
+        const rawFeatures = this.engineerFeatures(spo2, heartRate);
+        const scaledFeatures = this.scaleFeatures(rawFeatures);
+
+        console.log('Raw features:', rawFeatures);
+        console.log('Scaled features:', scaledFeatures);
+
+        const inputTensor = tf.tensor2d([scaledFeatures], [1, 8]);
+        console.log('Input tensor shape:', inputTensor.shape);
+
+        const prediction = this.model.predict(inputTensor);
+        const probabilities = await prediction.data();
+
+        inputTensor.dispose();
+        prediction.dispose();
+
+        const [normal, mildHypoxia, severeHypoxia] = probabilities;
+        const maxIndex = probabilities.indexOf(Math.max(...probabilities));
+
+        const classes = ['Normal', 'Mild Hypoxia', 'Severe Hypoxia'];
+        const predictedClass = classes[maxIndex];
+        const confidence = probabilities[maxIndex];
+
+        const result = {
+            predictedClass,
+            confidence,
+            normal,
+            mildHypoxia,
+            severeHypoxia,
+            timestamp: Date.now(),
+            rawFeatures,
+            scaledFeatures
+        };
+
+        this.analysisHistory.push(result);
+        if (this.analysisHistory.length > 100) {
+            this.analysisHistory = this.analysisHistory.slice(-100);
+        }
+
+        return result;
     }
 
     generateInsights(spo2, heartRate, prediction) {
         const insights = [];
-
         if (spo2 < 90) {
-            insights.push({
-                type: 'critical',
-                message: 'Severe oxygen desaturation detected',
-                recommendation: 'Immediate medical attention required'
-            });
+            insights.push({ type: 'critical', message: 'Severe oxygen desaturation detected', recommendation: 'Immediate medical attention required' });
         } else if (spo2 < 95) {
-            insights.push({
-                type: 'warning',
-                message: 'Mild oxygen desaturation',
-                recommendation: 'Monitor closely and consider oxygen therapy'
-            });
+            insights.push({ type: 'warning', message: 'Mild oxygen desaturation', recommendation: 'Monitor closely and consider oxygen therapy' });
         } else {
-            insights.push({
-                type: 'positive',
-                message: 'Normal oxygen saturation',
-                recommendation: 'Continue current care'
-            });
+            insights.push({ type: 'positive', message: 'Normal oxygen saturation', recommendation: 'Continue current care' });
         }
 
         if (heartRate < 60) {
-            insights.push({
-                type: 'warning',
-                message: 'Bradycardia detected',
-                recommendation: 'Monitor heart rate closely'
-            });
+            insights.push({ type: 'warning', message: 'Bradycardia detected', recommendation: 'Monitor heart rate closely' });
         } else if (heartRate > 100) {
-            insights.push({
-                type: 'warning',
-                message: 'Tachycardia detected',
-                recommendation: 'Consider causes and treatment'
-            });
+            insights.push({ type: 'warning', message: 'Tachycardia detected', recommendation: 'Consider causes and treatment' });
         }
 
         if (prediction.confidence < 0.7) {
-            insights.push({
-                type: 'info',
-                message: 'AI prediction confidence is low',
-                recommendation: 'Consider manual assessment'
-            });
+            insights.push({ type: 'info', message: 'AI prediction confidence is low', recommendation: 'Consider manual assessment' });
         }
 
         return insights;
@@ -273,7 +222,6 @@ class FixedHypoxiaClassifier {
     getRiskAssessment(spo2, heartRate, prediction) {
         let score = 0;
         const maxScore = 7;
-
         if (spo2 < 90) score += 3;
         else if (spo2 < 95) score += 1;
 
@@ -301,11 +249,7 @@ class FixedHypoxiaClassifier {
 
     exportPredictionData() {
         return JSON.stringify({
-            modelInfo: {
-                loaded: this.isModelLoaded,
-                inputShape: this.model?.inputShape,
-                outputShape: this.model?.outputShape
-            },
+            modelInfo: { loaded: this.isModelLoaded, inputShape: this.model?.inputShape, outputShape: this.model?.outputShape },
             preprocessingParams: this.preprocessingParams,
             scalerInfo: this.scaler,
             analysisHistory: this.analysisHistory,
@@ -314,4 +258,4 @@ class FixedHypoxiaClassifier {
     }
 }
 
-const HypoxiaClassifier = FixedHypoxiaClassifier;
+export { FixedHypoxiaClassifier as HypoxiaClassifier };
