@@ -124,7 +124,7 @@ class HypoxiaMonitorAppWithAI extends HypoxiaMonitorApp {
 
 // Configuration object for easy customization (updated for production model)
 const AIConfig = {
-    modelPath: '/web_model/model.json', // Path to your trained model
+    modelPath: '/trained_model/model.json', // Path to your trained model
     updateInterval: 2000,
     featureRanges: {
         spo2: { min: 70, max: 100 },
