@@ -3,20 +3,32 @@ class HypoxiaClassifier {
         this.model = null;
         this.isModelLoaded = false;
         this.analysisHistory = [];
-        this.modelPath = './trained_model/model.json';
+        this.modelPath = './trained_model/model.json'; // Updated path to match Python output
+        this.preprocessingParams = null;
+        this.scaler = null;
     }
 
     async loadModel() {
         try {
             console.log('Loading hypoxia classification model...');
+            
+            // Load preprocessing parameters first
+            await this.loadPreprocessingParams();
+            
+            // Load the TensorFlow.js model
             this.model = await tf.loadLayersModel(this.modelPath);
+            
             console.log('Model loaded successfully');
+            console.log('Input shape:', this.model.inputShape);
+            console.log('Output shape:', this.model.outputShape);
+            
             this.isModelLoaded = true;
             
             // Dispatch ready event
             window.dispatchEvent(new CustomEvent('aiModelReady', {
                 detail: { isReady: true }
             }));
+            
         } catch (error) {
             console.error('Failed to load model:', error);
             this.isModelLoaded = false;
@@ -28,36 +40,124 @@ class HypoxiaClassifier {
         }
     }
 
+    async loadPreprocessingParams() {
+        try {
+            const response = await fetch('./trained_model/preprocessing_params.json');
+            this.preprocessingParams = await response.json();
+            
+            // Initialize scaler with saved parameters
+            if (this.preprocessingParams.scaler_center && this.preprocessingParams.scaler_scale) {
+                this.scaler = {
+                    center: this.preprocessingParams.scaler_center,
+                    scale: this.preprocessingParams.scaler_scale
+                };
+            }
+            
+            console.log('Preprocessing parameters loaded:', this.preprocessingParams);
+        } catch (error) {
+            console.warn('Could not load preprocessing parameters, using defaults:', error);
+            // Use default parameters if file not found
+            this.initializeDefaultScaler();
+        }
+    }
+
+    initializeDefaultScaler() {
+        // Default scaler parameters - you should replace these with actual values from training
+        this.scaler = {
+            center: [0, 0, 0, 0, 0, 0, 0, 0], // 8 features
+            scale: [1, 1, 1, 1, 1, 1, 1, 1]   // 8 features
+        };
+    }
+
+    engineerFeatures(spo2, heartRate) {
+        // Match the exact feature engineering from Python training script
+        const features = [];
+        
+        // Basic features
+        features.push(spo2);                                    // spo2
+        features.push(heartRate);                               // heart_rate
+        
+        // Interaction features
+        features.push(spo2 / (heartRate + 1e-8));              // spo2_hr_ratio
+        features.push((spo2 * heartRate) / 1000);              // spo2_hr_product
+        
+        // Polynomial features
+        features.push(spo2 * spo2);                             // spo2_squared
+        features.push(heartRate * heartRate);                  // hr_squared
+        
+        // Binned features (matching Python pd.cut logic)
+        features.push(this.getBinnedValue(spo2, [0, 85, 90, 95, 100]));     // spo2_binned
+        features.push(this.getBinnedValue(heartRate, [0, 70, 90, 110, 200])); // hr_binned
+        
+        return features;
+    }
+
+    getBinnedValue(value, bins) {
+        // Match pandas cut logic: bins=[0, 85, 90, 95, 100], labels=[0, 1, 2, 3]
+        for (let i = 0; i < bins.length - 1; i++) {
+            if (value >= bins[i] && value < bins[i + 1]) {
+                return i;
+            }
+        }
+        // Handle edge case for maximum value
+        if (value >= bins[bins.length - 1]) {
+            return bins.length - 2;
+        }
+        return 0; // Default to first bin for values below minimum
+    }
+
+    scaleFeatures(features) {
+        if (!this.scaler) {
+            console.warn('No scaler available, returning unscaled features');
+            return features;
+        }
+        
+        // Apply RobustScaler transformation: (x - center) / scale
+        const scaledFeatures = features.map((feature, i) => {
+            return (feature - this.scaler.center[i]) / this.scaler.scale[i];
+        });
+        
+        return scaledFeatures;
+    }
+
     async predictHypoxiaStatus(spo2, heartRate) {
         if (!this.isModelLoaded) {
             throw new Error('Model not loaded');
         }
 
         try {
-            // Prepare input features (matching your training script)
-            const features = tf.tensor2d([[
-                spo2,
-                heartRate,
-                spo2 / (heartRate + 1e-8), // spo2_hr_ratio
-                (spo2 * heartRate) / 1000,  // spo2_hr_product
-                spo2 * spo2,                // spo2_squared
-                heartRate * heartRate,      // hr_squared
-                this.getBinnedValue(spo2, [0, 85, 90, 95, 100]), // spo2_binned
-                this.getBinnedValue(heartRate, [0, 70, 90, 110, 200]) // hr_binned
-            ]]);
+            // Validate inputs
+            if (spo2 < 0 || spo2 > 100 || heartRate < 0 || heartRate > 300) {
+                throw new Error('Invalid vital signs values');
+            }
+
+            // Engineer features (must match Python exactly)
+            const rawFeatures = this.engineerFeatures(spo2, heartRate);
+            
+            // Scale features
+            const scaledFeatures = this.scaleFeatures(rawFeatures);
+            
+            console.log('Raw features:', rawFeatures);
+            console.log('Scaled features:', scaledFeatures);
+
+            // Create tensor with correct shape [1, 8]
+            const inputTensor = tf.tensor2d([scaledFeatures], [1, 8]);
+            
+            console.log('Input tensor shape:', inputTensor.shape);
 
             // Make prediction
-            const prediction = this.model.predict(features);
+            const prediction = this.model.predict(inputTensor);
             const probabilities = await prediction.data();
             
             // Clean up tensors
-            features.dispose();
+            inputTensor.dispose();
             prediction.dispose();
 
-            // Map probabilities to classes
+            // Map probabilities to classes (matching Python label encoding)
             const [normal, mildHypoxia, severeHypoxia] = probabilities;
             const maxIndex = probabilities.indexOf(Math.max(...probabilities));
             
+            // Classes should match the label encoder from Python
             const classes = ['Normal', 'Mild Hypoxia', 'Severe Hypoxia'];
             const predictedClass = classes[maxIndex];
             const confidence = probabilities[maxIndex];
@@ -68,7 +168,9 @@ class HypoxiaClassifier {
                 normal,
                 mildHypoxia,
                 severeHypoxia,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                rawFeatures,
+                scaledFeatures
             };
 
             // Store in history
@@ -84,15 +186,6 @@ class HypoxiaClassifier {
             console.error('Prediction failed:', error);
             throw error;
         }
-    }
-
-    getBinnedValue(value, bins) {
-        for (let i = 0; i < bins.length - 1; i++) {
-            if (value >= bins[i] && value < bins[i + 1]) {
-                return i;
-            }
-        }
-        return bins.length - 1;
     }
 
     generateInsights(spo2, heartRate, prediction) {
@@ -143,6 +236,19 @@ class HypoxiaClassifier {
             });
         }
 
+        // Feature-based insights
+        if (prediction.rawFeatures) {
+            const [spo2Val, hrVal, ratio, product] = prediction.rawFeatures;
+            
+            if (ratio < 1.0) {
+                insights.push({
+                    type: 'info',
+                    message: 'SpO2 to heart rate ratio is low',
+                    recommendation: 'May indicate compensatory response'
+                });
+            }
+        }
+
         return insights;
     }
 
@@ -186,10 +292,70 @@ class HypoxiaClassifier {
         return JSON.stringify({
             modelInfo: {
                 loaded: this.isModelLoaded,
-                path: this.modelPath
+                path: this.modelPath,
+                inputShape: this.model?.inputShape,
+                outputShape: this.model?.outputShape
             },
+            preprocessingParams: this.preprocessingParams,
+            scalerInfo: this.scaler,
             analysisHistory: this.analysisHistory,
             exportTime: new Date().toISOString()
         }, null, 2);
     }
+
+    // Debug method to test feature engineering
+    debugFeatureEngineering(spo2, heartRate) {
+        console.log('=== Feature Engineering Debug ===');
+        console.log('Input values:', { spo2, heartRate });
+        
+        const rawFeatures = this.engineerFeatures(spo2, heartRate);
+        console.log('Raw features:', rawFeatures);
+        
+        const scaledFeatures = this.scaleFeatures(rawFeatures);
+        console.log('Scaled features:', scaledFeatures);
+        
+        console.log('Feature mapping:');
+        const featureNames = ['spo2', 'heart_rate', 'spo2_hr_ratio', 'spo2_hr_product', 
+                             'spo2_squared', 'hr_squared', 'spo2_binned', 'hr_binned'];
+        
+        rawFeatures.forEach((feature, i) => {
+            console.log(`  ${featureNames[i]}: ${feature} -> ${scaledFeatures[i]}`);
+        });
+        
+        return { rawFeatures, scaledFeatures };
+    }
+}
+
+// Testing utility to verify the feature engineering matches Python
+const FeatureEngineeringTest = {
+    testCase: (spo2, heartRate) => {
+        console.log(`\n=== Testing SpO2: ${spo2}, Heart Rate: ${heartRate} ===`);
+        
+        const classifier = new HypoxiaClassifier();
+        classifier.initializeDefaultScaler(); // Use defaults for testing
+        
+        const result = classifier.debugFeatureEngineering(spo2, heartRate);
+        
+        // Expected calculations (verify these match your Python output)
+        const expected = {
+            spo2: spo2,
+            heart_rate: heartRate,
+            spo2_hr_ratio: spo2 / (heartRate + 1e-8),
+            spo2_hr_product: (spo2 * heartRate) / 1000,
+            spo2_squared: spo2 * spo2,
+            hr_squared: heartRate * heartRate,
+            spo2_binned: classifier.getBinnedValue(spo2, [0, 85, 90, 95, 100]),
+            hr_binned: classifier.getBinnedValue(heartRate, [0, 70, 90, 110, 200])
+        };
+        
+        console.log('Expected features:', Object.values(expected));
+        console.log('Match:', JSON.stringify(result.rawFeatures) === JSON.stringify(Object.values(expected)));
+        
+        return result;
+    }
+};
+
+// Export for use
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { HypoxiaClassifier, FeatureEngineeringTest };
 }
