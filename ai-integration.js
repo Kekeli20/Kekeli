@@ -3,7 +3,7 @@ class HypoxiaMonitorAppWithAI extends HypoxiaMonitorApp {
         super();
 
         // Initialize AI components
-        this.aiManager = new HypoxiaClassifier(); // Use your production classifier
+        this.aiManager = new FixedHypoxiaClassifier(); // Use the fixed classifier
         this.aiInterface = null;
 
         // Register event listener BEFORE loading the model
@@ -16,8 +16,12 @@ class HypoxiaMonitorAppWithAI extends HypoxiaMonitorApp {
     initializeAI() {
         window.addEventListener('aiModelReady', () => {
             console.log('aiModelReady event received');
-            this.aiInterface = new AIInterface(this.aiManager);
-            console.log('AIInterface created:', this.aiInterface);
+            if (window.AIInterface) {
+                this.aiInterface = new AIInterface(this.aiManager);
+                console.log('AIInterface created:', this.aiInterface);
+            } else {
+                console.warn('AIInterface class not available');
+            }
         });
 
         window.addEventListener('aiError', (event) => {
@@ -124,7 +128,7 @@ class HypoxiaMonitorAppWithAI extends HypoxiaMonitorApp {
 
 // Configuration object for easy customization (updated for production model)
 const AIConfig = {
-    modelPath: '/trained_model/model.json', // Path to your trained model
+    modelPath: './trained_model/model.json', // Make sure this path is correct
     updateInterval: 2000,
     featureRanges: {
         spo2: { min: 70, max: 100 },
@@ -216,11 +220,7 @@ const AIUtils = {
     }
 };
 
-// Export for use in your application
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { HypoxiaMonitorAppWithAI, AIConfig, AIUtils };
-}
-// At the end of the file
+// Make available globally for browser use (NO Node.js exports)
 window.HypoxiaMonitorAppWithAI = HypoxiaMonitorAppWithAI;
 window.AIConfig = AIConfig;
 window.AIUtils = AIUtils;
