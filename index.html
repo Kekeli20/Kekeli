@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="ai-styles.css">
 
-    <!-- Libraries -->
+    <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
@@ -41,11 +41,13 @@
         </header>
 
         <main class="main-content">
+            <!-- Control Panel -->
             <section class="control-panel">
                 <button id="connectBtn" class="connect-btn">Connect your device</button>
                 <button id="disconnectBtn" class="disconnect-btn" disabled>Disconnect your device</button>
             </section>
 
+            <!-- Vital Signs -->
             <section class="vital-signs">
                 <div class="vital-card spo2-card">
                     <div class="vital-header">
@@ -68,6 +70,7 @@
                 </div>
             </section>
 
+            <!-- Chart Section -->
             <section class="chart-section">
                 <div class="chart-header">
                     <h3>Real-time SpO₂ Monitoring</h3>
@@ -95,6 +98,7 @@
                 </div>
             </section>
 
+            <!-- Data Section -->
             <section class="data-section">
                 <div class="data-header">
                     <h3>Data Management</h3>
@@ -109,11 +113,14 @@
                 </div>
                 <div class="recent-data">
                     <h4>Recent Measurements</h4>
-                    <div id="recentDataList" class="data-list"><p class="no-data">No data available</p></div>
+                    <div id="recentDataList" class="data-list">
+                        <p class="no-data">No data available</p>
+                    </div>
                 </div>
             </section>
         </main>
 
+        <!-- Alerts -->
         <div id="alertModal" class="alert-modal">
             <div class="alert-content">
                 <div class="alert-icon">⚠️</div>
@@ -133,22 +140,13 @@
         </div>
     </div>
 
-    <!-- JS Modules -->
+    <!-- Scripts -->
     <script src="bluetooth.js"></script>
     <script src="chart.js"></script>
     <script src="app.js"></script>
-    <script type="module">
-        import { HypoxiaClassifier } from './public/web_model/hypoxia_classifier.js';
 
-        const classifier = new HypoxiaClassifier();
-        classifier.loadModel().then(() => {
-            console.log("AI model loaded ✅");
-            window.hypoxiaClassifier = classifier; // make accessible globally
-        }).catch(err => {
-            console.error("AI model load failed:", err);
-        });
-    </script>
-    <script src="ai-interface.js"></script>
-    <script src="ai-integration.js"></script>
+    <!-- AI Classifier -->
+    <script type="module" src="public/web_model/hypoxia_classifier.js"></script>
+    <script type="module" src="ai-integration.js"></script>
 </body>
 </html>
