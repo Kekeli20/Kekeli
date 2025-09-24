@@ -1,0 +1,50 @@
+{
+  "scaler_center": [
+    95.0,
+    80.0,
+    1.170731707174301,
+    7.524,
+    9025.0,
+    6400.0,
+    2.0,
+    1.0
+  ],
+  "scaler_scale": [
+    5.0,
+    11.0,
+    0.16180823676147038,
+    1.0729999999999995,
+    945.0,
+    1771.0,
+    1.0,
+    1.0
+  ],
+  "label_classes": [
+    0,
+    1,
+    2
+  ],
+  "feature_columns": [
+    "spo2",
+    "heart_rate",
+    "spo2_hr_ratio",
+    "spo2_hr_product",
+    "spo2_squared",
+    "hr_squared",
+    "spo2_binned",
+    "hr_binned"
+  ],
+  "class_weights": {
+    "0": 1.9332665999332665,
+    "1": 0.8047222222222222,
+    "2": 0.8064022268615171
+  },
+  "model_input_shape": [
+    null,
+    8
+  ],
+  "model_output_shape": [
+    null,
+    3
+  ]
+}

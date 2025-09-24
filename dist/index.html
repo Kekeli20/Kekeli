@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HypoxGuard - Professional Hypoxia Monitor</title>
+    <link rel="stylesheet" href="src/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="title-icon">🫁</span>
+                    O₂-Track
+                </h1>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span class="status-text" id="statusText">Disconnected</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="control-panel">
+                <button id="connectBtn" class="connect-btn">
+                    <span class="btn-icon"></span>
+                    Connect your device
+                </button>
+                <button id="disconnectBtn" class="disconnect-btn" disabled>
+                    <span class="btn-icon"></span>
+                    Disconnect your device
+                </button>
+            </section>
+
+            <section class="vital-signs">
+                <div class="vital-card spo2-card">
+                    <div class="vital-header">
+                        <h3>SpO₂</h3>
+                        <div class="vital-status" id="spo2Status"></div>
+                    </div>
+                    <div class="vital-value" id="spo2Value">--</div>
+                    <div class="vital-unit">%</div>
+                    <div class="vital-range">Normal: 95-100%</div>
+                </div>
+
+                <div class="vital-card hr-card">
+                    <div class="vital-header">
+                        <h3>Heart Rate</h3>
+                        <div class="vital-status" id="hrStatus"></div>
+                    </div>
+                    <div class="vital-value" id="hrValue">--</div>
+                    <div class="vital-unit">BPM</div>
+                    <div class="vital-range">Normal: 60-100 BPM</div>
+                </div>
+            </section>
+
+            <section class="chart-section">
+                <div class="chart-header">
+                    <h3>Real-time SpO₂ Monitoring</h3>
+                    <div class="chart-controls">
+                        <button id="clearDataBtn" class="chart-btn">Clear Data</button>
+                        <button id="pauseBtn" class="chart-btn">Pause</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="spo2Chart"></canvas>
+                </div>
+                <div class="hypoxia-legend">
+                    <div class="legend-item">
+                        <div class="legend-indicator normal"></div>
+                        <span>Normal (≥95%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-indicator mild-hypoxia"></div>
+                        <span>Mild Hypoxia (90-94%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-indicator severe-hypoxia"></div>
+                        <span>Severe Hypoxia (&lt;90%)</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="data-section">
+                <div class="data-header">
+                    <h3>Data Management</h3>
+                    <div class="data-stats">
+                        <span>Total Records: <span id="totalRecords">0</span></span>
+                        <span>Session Duration: <span id="sessionDuration">00:00:00</span></span>
+                    </div>
+                </div>
+                <div class="data-controls">
+                    <button id="downloadBtn" class="download-btn">
+                        <span class="btn-icon">📥</span>
+                        Download Data (CSV)
+                    </button>
+                    <button id="clearStorageBtn" class="clear-btn">
+                        <span class="btn-icon">🗑️</span>
+                        Clear All Data
+                    </button>
+                </div>
+                <div class="recent-data">
+                    <h4>Recent Measurements</h4>
+                    <div id="recentDataList" class="data-list">
+                        <p class="no-data">No data available</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div id="alertModal" class="alert-modal">
+            <div class="alert-content">
+                <div class="alert-icon">⚠️</div>
+                <h3 class="alert-title">HYPOXIA ALERT</h3>
+                <p class="alert-message">SpO₂ levels below normal range detected!</p>
+                <button id="acknowledgeAlert" class="alert-btn">Acknowledge</button>
+            </div>
+        </div>
+
+        <div id="errorModal" class="error-modal">
+            <div class="error-content">
+                <div class="error-icon">❌</div>
+                <h3 class="error-title">Connection Error</h3>
+                <p id="errorMessage" class="error-message"></p>
+                <button id="closeError" class="error-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/bluetooth.js"></script>
+    <script src="src/chart.js"></script>
+    <script src="src/app.js"></script>
+</body>
+</html>

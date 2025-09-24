@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypoxia Classifier - Medical AI Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.4.0/dist/tf.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 1200px; margin: 0 auto; padding: 20px;
+            background: #f8f9fa;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 30px; border-radius: 12px; margin-bottom: 20px;
+            text-align: center;
+        }
+        .container { 
+            background: white; padding: 25px; border-radius: 12px; 
+            margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .input-group { 
+            margin: 15px 0; display: flex; align-items: center;
+        }
+        .input-group label { 
+            display: inline-block; width: 150px; font-weight: 600;
+        }
+        .input-group input { 
+            width: 120px; padding: 8px 12px; border: 2px solid #e0e0e0;
+            border-radius: 6px; font-size: 16px;
+        }
+        .input-group input:focus {
+            outline: none; border-color: #667eea;
+        }
+        button { 
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white; padding: 12px 24px; border: none; 
+            border-radius: 6px; cursor: pointer; margin: 5px;
+            font-size: 16px; font-weight: 600;
+            transition: transform 0.2s;
+        }
+        button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .result { 
+            margin: 20px 0; padding: 20px; border-radius: 8px; 
+            border-left: 5px solid;
+        }
+        .normal { 
+            background: #d4edda; color: #155724; 
+            border-left-color: #28a745;
+        }
+        .mild { 
+            background: #fff3cd; color: #856404; 
+            border-left-color: #ffc107;
+        }
+        .severe { 
+            background: #f8d7da; color: #721c24; 
+            border-left-color: #dc3545;
+        }
+        .error { 
+            background: #f8d7da; color: #721c24; 
+            border-left-color: #dc3545;
+        }
+        .info { 
+            background: #d1ecf1; color: #0c5460; 
+            border-left-color: #17a2b8;
+        }
+        .grid { 
+            display: grid; grid-template-columns: 1fr 1fr; 
+            gap: 20px; margin: 20px 0;
+        }
+        @media (max-width: 768px) { 
+            .grid { grid-template-columns: 1fr; }
+        }
+        .progress {
+            width: 100%; height: 4px; background: #e0e0e0;
+            border-radius: 2px; overflow: hidden; margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%; background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%; transition: width 0.3s;
+        }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🫁 Hypoxia Classification System</h1>
+        <p>AI-Powered Medical Diagnosis Tool</p>
+    </div>
+    
+    <div class="container">
+        <h2>📊 Model Status</h2>
+        <div id="modelStatus">🔄 Loading TensorFlow.js model...</div>
+        <div class="progress">
+            <div id="progressBar" class="progress-bar"></div>
+        </div>
+    </div>
+    
+    <div class="grid">
+        <div class="container">
+            <h2>🔬 Single Patient Test</h2>
+            <div class="input-group">
+                <label for="spo2">SpO2 (%):</label>
+                <input type="number" id="spo2" value="95" min="70" max="100" step="0.1">
+                <span style="margin-left: 10px; color: #666;">Normal: 95-100%</span>
+            </div>
+            <div class="input-group">
+                <label for="heartRate">Heart Rate (bpm):</label>
+                <input type="number" id="heartRate" value="80" min="40" max="200" step="1">
+                <span style="margin-left: 10px; color: #666;">Normal: 60-100 bpm</span>
+            </div>
+            <button onclick="predict()">🔍 Predict</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+        
+        <div class="container">
+            <h2>🧪 Test Suite</h2>
+            <button onclick="runTests()">▶️ Run Medical Tests</button>
+            <button onclick="runBatchTest()">👥 Batch Test (6 patients)</button>
+            <button onclick="showModelInfo()">ℹ️ Model Information</button>
+        </div>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script src="web_model/hypoxia_classifier.js"></script>
+    <script>
+        let classifier;
+        let testsRunning = false;
+        
+        async function initializeModel() {
+            try {
+                updateProgress(10);
+                classifier = new HypoxiaClassifier();
+                
+                updateProgress(30);
+                document.getElementById('modelStatus').innerHTML = 
+                    '🔄 Loading model files...';
+                
+                const success = await classifier.loadModel();
+                
+                updateProgress(100);
+                
+                if (success) {
+                    document.getElementById('modelStatus').innerHTML = 
+                        '<span style="color: #28a745; font-weight: 600;">✅ Model loaded successfully! Ready for predictions.</span>';
+                } else {
+                    document.getElementById('modelStatus').innerHTML = 
+                        '<span style="color: #dc3545; font-weight: 600;">❌ Failed to load model. Check console for details.</span>';
+                }
+            } catch (error) {
+                updateProgress(0);
+                document.getElementById('modelStatus').innerHTML = 
+                    `<span style="color: #dc3545; font-weight: 600;">❌ Error: ${error.message}</span>`;
+                console.error('Model initialization error:', error);
+            }
+        }
+        
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+        
+        async function predict() {
+            if (!classifier) {
+                alert('Model not loaded yet! Please wait.');
+                return;
+            }
+            
+            const spo2 = parseFloat(document.getElementById('spo2').value);
+            const heartRate = parseFloat(document.getElementById('heartRate').value);
+            
+            if (isNaN(spo2) || isNaN(heartRate)) {
+                alert('Please enter valid numbers for SpO2 and Heart Rate');
+                return;
+            }
+            
+            try {
+                const startTime = performance.now();
+                const result = await classifier.predict(spo2, heartRate);
+                const endTime = performance.now();
+                const inferenceTime = (endTime - startTime).toFixed(1);
+                
+                let cssClass = 'normal';
+                let icon = '✅';
+                let recommendation = 'Patient appears stable. Continue routine monitoring.';
+                
+                if (result.class === 1) {
+                    cssClass = 'mild';
+                    icon = '⚠️';
+                    recommendation = 'Mild hypoxia detected. Increase monitoring frequency and consider supplemental oxygen.';
+                } else if (result.class === 2) {
+                    cssClass = 'severe';
+                    icon = '🚨';
+                    recommendation = 'Severe hypoxia detected. Immediate medical intervention required!';
+                }
+                
+                const resultDiv = document.createElement('div');
+                resultDiv.className = `result ${cssClass}`;
+                resultDiv.innerHTML = `
+                    <h3>${icon} Prediction Result</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <p><strong>Patient Data:</strong></p>
+                            <p>• SpO2: ${spo2}%</p>
+                            <p>• Heart Rate: ${heartRate} bpm</p>
+                            <p>• Inference Time: ${inferenceTime}ms</p>
+                        </div>
+                        <div>
+                            <p><strong>AI Analysis:</strong></p>
+                            <p>• Classification: <strong>${result.className}</strong></p>
+                            <p>• Confidence: <strong>${(result.confidence * 100).toFixed(1)}%</strong></p>
+                        </div>
+                    </div>
+                    <p><strong>Clinical Recommendation:</strong><br>${recommendation}</p>
+                    <details style="margin-top: 15px;">
+                        <summary style="cursor: pointer; font-weight: 600;">📊 Detailed Probabilities</summary>
+                        <div style="margin-top: 10px;">
+                            <div>Normal (Class 0): <strong>${(result.probabilities[0] * 100).toFixed(1)}%</strong></div>
+                            <div>Mild Hypoxia (Class 1): <strong>${(result.probabilities[1] * 100).toFixed(1)}%</strong></div>
+                            <div>Severe Hypoxia (Class 2): <strong>${(result.probabilities[2] * 100).toFixed(1)}%</strong></div>
+                        </div>
+                    </details>
+                    <small style="color: #666; display: block; margin-top: 10px;">
+                        Timestamp: ${new Date().toLocaleString()}
+                    </small>
+                `;
+                
+                const resultsContainer = document.getElementById('results');
+                resultsContainer.insertBefore(resultDiv, resultsContainer.firstChild);
+                
+            } catch (error) {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <h3>❌ Prediction Error</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>Please check your inputs and try again.</p>
+                `;
+                document.getElementById('results').appendChild(resultDiv);
+            }
+        }
+        
+        async function runTests() {
+            if (!classifier || testsRunning) return;
+            
+            testsRunning = true;
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '⏳ Running Tests...';
+            button.disabled = true;
+            
+            try {
+                // Run the built-in test suite
+                await classifier.test();
+                
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'result info';
+                resultDiv.innerHTML = `
+                    <h3>🧪 Test Suite Complete</h3>
+                    <p>Medical scenario tests have been completed. Check the browser console for detailed results.</p>
+                    <p><em>The test suite evaluates the model against realistic medical scenarios with different severity levels.</em></p>
+                `;
+                document.getElementById('results').appendChild(resultDiv);
+                
+            } catch (error) {
+                console.error('Test suite error:', error);
+            } finally {
+                button.textContent = originalText;
+                button.disabled = false;
+                testsRunning = false;
+            }
+        }
+        
+        async function runBatchTest() {
+            if (!classifier) return;
+            
+            const patients = [
+                { id: 'P001', spo2: 98, heartRate: 72, scenario: 'Healthy adult' },
+                { id: 'P002', spo2: 94, heartRate: 88, scenario: 'Post-exercise' },
+                { id: 'P003', spo2: 90, heartRate: 95, scenario: 'Mild respiratory issue' },
+                { id: 'P004', spo2: 87, heartRate: 105, scenario: 'Moderate hypoxia' },
+                { id: 'P005', spo2: 83, heartRate: 115, scenario: 'Severe hypoxia' },
+                { id: 'P006', spo2: 79, heartRate: 125, scenario: 'Critical case' }
+            ];
+            
+            try {
+                const batchResults = await classifier.predictBatch(patients);
+                
+                let tableHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Patient ID</th>
+                                <th>SpO2 (%)</th>
+                                <th>HR (bpm)</th>
+                                <th>Scenario</th>
+                                <th>Prediction</th>
+                                <th>Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                batchResults.forEach(result => {
+                    if (result.error) {
+                        tableHTML += `
+                            <tr style="background: #f8d7da;">
+                                <td>${result.patientId}</td>
+                                <td colspan="5">Error: ${result.error}</td>
+                            </tr>
+                        `;
+                    } else {
+                        const patient = patients.find(p => p.id === result.patientId);
+                        tableHTML += `
+                            <tr>
+                                <td>${result.patientId}</td>
+                                <td>${result.input.spo2}</td>
+                                <td>${result.input.heartRate}</td>
+                                <td>${patient?.scenario || 'Unknown'}</td>
+                                <td>${result.prediction.className}</td>
+                                <td>${(result.prediction.confidence * 100).toFixed(1)}%</td>
+                            </tr>
+                        `;
+                    }
+                });
+                
+                tableHTML += '</tbody></table>';
+                
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'result info';
+                resultDiv.innerHTML = `
+                    <h3>👥 Batch Test Results</h3>
+                    <p>Processed ${patients.length} patients simultaneously:</p>
+                    ${tableHTML}
+                `;
+                document.getElementById('results').appendChild(resultDiv);
+                
+            } catch (error) {
+                console.error('Batch test error:', error);
+            }
+        }
+        
+        function showModelInfo() {
+            if (!classifier) return;
+            
+            const info = classifier.getModelInfo();
+            
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'result info';
+            resultDiv.innerHTML = `
+                <h3>ℹ️ Model Information</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <p><strong>Architecture:</strong></p>
+                        <p>• Input Shape: ${JSON.stringify(info.inputShape)}</p>
+                        <p>• Output Shape: ${JSON.stringify(info.outputShape)}</p>
+                        <p>• Total Layers: ${info.numLayers}</p>
+                        <p>• Total Parameters: ${info.totalParams?.toLocaleString() || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p><strong>Configuration:</strong></p>
+                        <p>• Features: ${info.featureColumns?.length || 0}</p>
+                        <p>• Classes: ${info.classNames?.length || 0}</p>
+                        <p>• Scaler: ${info.scalerLoaded ? '✅ Loaded' : '❌ Not loaded'}</p>
+                    </div>
+                </div>
+                <details>
+                    <summary style="cursor: pointer; font-weight: 600;">🔍 Feature Details</summary>
+                    <p style="margin-top: 10px;">
+                        <strong>Input Features:</strong><br>
+                        ${info.featureColumns?.join(', ') || 'N/A'}
+                    </p>
+                    <p>
+                        <strong>Output Classes:</strong><br>
+                        ${info.classNames?.join(', ') || 'N/A'}
+                    </p>
+                </details>
+            `;
+            document.getElementById('results').appendChild(resultDiv);
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        // Initialize when page loads
+        window.onload = initializeModel;
+        
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey || event.metaKey) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    predict();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
